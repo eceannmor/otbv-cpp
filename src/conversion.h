@@ -63,8 +63,10 @@ bool is_subvolume_homogeneous(const vector3<T> &data, const size_t xs,
 
 /**
  * @brief Returns the total size of \p data
+ * Assumes that \p data is a rectangular cuboid
  */
-size_t size(const vector3<bool> &data);
+template <typename T>
+size_t size(const vector3<T> &data);
 
 /**
  * @brief Helper function. Takes a volume slice and a reference to the encoding

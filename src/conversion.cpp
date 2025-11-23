@@ -120,8 +120,14 @@ bool is_subvolume_homogeneous(const vector3<T> &data, const size_t xs,
   return true;
 }
 
-size_t size(const vector3<bool> &data) {
-  return data.size() * data[0].size() * data[0][0].size();
+template <typename T>
+size_t size(const vector3<T> &data) {
+  size_t size = data.size();
+  if (0 != size)
+    size *= data[0].size();
+  if (0 != size)
+    size *= data[0][0].size();
+  return size;
 }
 
 void encode_recursive(const vector3<bool> &data, std::vector<bool> &encoding,
@@ -174,6 +180,9 @@ std::vector<bool> encode(const vector3<bool> &data) {
 }
 
 void pad_to_cube(vector3<bool> &data) {
+  if (0 == size(data)) {
+    throw std::invalid_argument("Cannot pad data of size 0 to cube");
+  }
   size_t max_res =
       max_res_pow2_roof(data.size(), data[0].size(), data[0][0].size());
   data.resize(max_res);
@@ -192,7 +201,10 @@ vector3<bool> pad_to_cube(const vector3<bool> &data) {
 }
 
 template <typename T> vector3<T> deep_copy(const vector3<T> &vector) {
-  vector3<bool> copy;
+  vector3<T> copy;
+  if (0 == size(vector)) {
+    return copy;
+  }
   size_t x_res = vector.size(), y_res = vector[0].size(),
          z_res = vector[0][0].size();
   copy.resize(x_res);
