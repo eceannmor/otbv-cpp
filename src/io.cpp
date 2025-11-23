@@ -121,7 +121,7 @@ std::vector<std::vector<std::vector<bool>>> load(const std::string &filename) {
     // signature
     char sign_buffer[5];
     static_cast<void>(file_in.read(sign_buffer, 5));
-    if (!strcmp(SIGNATURE, sign_buffer)) {
+    if (!std::memcmp(SIGNATURE, sign_buffer, 5)) {
       throw std::runtime_error(
           "Signature validation failed. Could not confirm that the provided "
           "filename refers to a valid OTBV file.");
