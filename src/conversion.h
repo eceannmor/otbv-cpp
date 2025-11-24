@@ -65,8 +65,7 @@ bool is_subvolume_homogeneous(const vector3<T> &data, const size_t xs,
  * @brief Returns the total size of \p data
  * Assumes that \p data is a rectangular cuboid
  */
-template <typename T>
-size_t size(const vector3<T> &data);
+template <typename T> size_t size(const vector3<T> &data);
 
 /**
  * @brief Helper function. Takes a volume slice and a reference to the encoding
@@ -74,7 +73,8 @@ size_t size(const vector3<T> &data);
  */
 void encode_recursive(const vector3<bool> &data, std::vector<bool> &encoding,
                       const size_t xs, const size_t xe, const size_t ys,
-                      const size_t ye, const size_t zs, const size_t ze);
+                      const size_t ye, const size_t zs, const size_t ze,
+                      size_t depth);
 
 /**
  * @brief Encodes the binary volume
@@ -120,7 +120,7 @@ template <typename T> vector3<T> deep_copy(const vector3<T> &vector);
 size_t decode_recursive(const std::vector<bool> &encoding, vector3<bool> &out,
                         size_t next_idx, const size_t xs, const size_t xe,
                         const size_t ys, const size_t ye, const size_t zs,
-                        const size_t ze);
+                        const size_t ze, size_t depth);
 
 /**
  * @brief Decodes the encoded volume

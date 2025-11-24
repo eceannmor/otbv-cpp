@@ -10,6 +10,9 @@
 #include <tuple>
 #include <vector>
 
+// enough to accommodate volumes @ 1M per dimension
+static constexpr size_t RECURSION_MAX_DEPTH = 20;
+
 namespace otbv {
 
 // https://www.reddit.com/r/cpp_questions/comments/1h3sva9/
@@ -120,8 +123,7 @@ bool is_subvolume_homogeneous(const vector3<T> &data, const size_t xs,
   return true;
 }
 
-template <typename T>
-size_t size(const vector3<T> &data) {
+template <typename T> size_t size(const vector3<T> &data) {
   size_t size = data.size();
   if (0 != size)
     size *= data[0].size();
@@ -132,7 +134,12 @@ size_t size(const vector3<T> &data) {
 
 void encode_recursive(const vector3<bool> &data, std::vector<bool> &encoding,
                       const size_t xs, const size_t xe, const size_t ys,
-                      const size_t ye, const size_t zs, const size_t ze) {
+                      const size_t ye, const size_t zs, const size_t ze,
+                      size_t depth) {
+  if (depth > RECURSION_MAX_DEPTH) {
+    throw std::runtime_error("Reached maximum recursion depth while encoding. "
+                             "The data is likely too large or malformed.");
+  }
   // start index inclusive, end index exclusive
   size_t subvolume_size = (xe - xs) * (ye - ys) * (ze - zs);
   if (0 == subvolume_size) {
@@ -166,7 +173,7 @@ void encode_recursive(const vector3<bool> &data, std::vector<bool> &encoding,
         size_t zfirst = k ? z_split : zs;
         size_t zsecond = k ? ze : z_split;
         encode_recursive(data, encoding, xfirst, xsecond, yfirst, ysecond,
-                         zfirst, zsecond);
+                         zfirst, zsecond, depth + 1);
       }
     }
   }
@@ -175,7 +182,7 @@ void encode_recursive(const vector3<bool> &data, std::vector<bool> &encoding,
 std::vector<bool> encode(const vector3<bool> &data) {
   std::vector<bool> out;
   size_t resolution = data.size();
-  encode_recursive(data, out, 0, resolution, 0, resolution, 0, resolution);
+  encode_recursive(data, out, 0, resolution, 0, resolution, 0, resolution, 0);
   return out;
 }
 
@@ -241,11 +248,14 @@ inline void set_range(vector3<bool> &data, bool value, const size_t xs,
 size_t decode_recursive(const std::vector<bool> &encoding, vector3<bool> &out,
                         size_t next_idx, const size_t xs, const size_t xe,
                         const size_t ys, const size_t ye, const size_t zs,
-                        const size_t ze) {
+                        const size_t ze, size_t depth) {
+  if (depth > RECURSION_MAX_DEPTH) {
+    throw std::runtime_error("Reached maximum recursion depth while decoding. "
+                             "The data is likely too large or malformed.");
+  }
   if (next_idx >= encoding.size()) {
     throw std::out_of_range("Unexpected end of the encoding");
   }
-
   bool token = encoding[next_idx];
   next_idx++;
   if (!token) {
@@ -265,7 +275,7 @@ size_t decode_recursive(const std::vector<bool> &encoding, vector3<bool> &out,
         for (int z : {0, 1}) {
           next_idx = decode_recursive(
               encoding, out, next_idx, x_split[x], x_split[x + 1], y_split[y],
-              y_split[y + 1], z_split[z], z_split[z + 1]);
+              y_split[y + 1], z_split[z], z_split[z + 1], depth + 1);
         }
       }
     }
@@ -279,7 +289,7 @@ vector3<bool> decode(const std::vector<bool> &encoding,
   size_t decoding_res = max_res_pow2_roof(resolution);
   cut_volume(out, decoding_res, decoding_res, decoding_res);
   size_t end_idx = decode_recursive(encoding, out, 0, 0, decoding_res, 0,
-                                    decoding_res, 0, decoding_res);
+                                    decoding_res, 0, decoding_res, 0);
   assert(end_idx == encoding.size());
   cut_volume(out, resolution);
   return out;
