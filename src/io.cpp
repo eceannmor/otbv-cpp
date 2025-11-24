@@ -13,12 +13,9 @@
 namespace otbv {
 
 static constexpr char SIGNATURE[] = "OTBV\x96";
-
-constexpr bool endswith(const std::string &str, const std::string &suffix) {
-  return str.length() >= suffix.length() &&
-         0 == str.compare(str.length() - suffix.length(), suffix.length(),
-                          suffix);
-}
+static constexpr size_t MAX_RESOLUTION = 100'000;
+static constexpr size_t MAX_VOLUME =
+    MAX_RESOLUTION * MAX_RESOLUTION * MAX_RESOLUTION;
 
 void stream_data_as_file_bytes(
     std::ostream &stream, const std::vector<bool> &data,
@@ -74,31 +71,17 @@ void save(const std::string &filename, const std::vector<bool> &data,
 
 void save(const std::string &filename,
           const std::vector<std::vector<std::vector<bool>>> &data) {
-  size_t x_res, y_res, z_res;
-  x_res = data.size();
-  if (!x_res) {
-    printf("The provided volume size is 0. Nothing will be written");
-    return;
-  }
-  y_res = data[0].size();
-  if (!y_res) {
-    printf("The provided volume size is 0. Nothing will be written");
-    return;
-  }
-  z_res = data[0][0].size();
-  if (!z_res) {
+  if (0 == size(data)) {
     printf("The provided volume size is 0. Nothing will be written");
     return;
   }
   const vector3<bool> padded_data = pad_to_cube(data);
-  bool padded = false;
-  if (size(padded_data) > size(data)) {
-    padded = true;
-  }
   const std::vector<bool> encoded_data = encode(padded_data);
-  const auto resolution = std::make_tuple(x_res, y_res, z_res);
+  const auto resolution =
+      std::make_tuple(data.size(), data[0].size(), data[0][0].size());
   std::ofstream file_out(filename, std::ofstream::binary);
-  stream_data_as_file_bytes(file_out, encoded_data, resolution, padded);
+  stream_data_as_file_bytes(file_out, encoded_data, resolution,
+                            size(padded_data) > size(data));
   int bytes_written = file_out.tellp();
   if (bytes_written > 0) {
     printf("Written %d bytes\n", bytes_written);
@@ -117,37 +100,42 @@ uint32_t pack_chars(char *c) {
 
 std::vector<std::vector<std::vector<bool>>> load(const std::string &filename) {
   std::ifstream file_in(filename, std::ios::binary);
-  {
-    // signature
-    char sign_buffer[5];
-    static_cast<void>(file_in.read(sign_buffer, 5));
-    if (std::memcmp(SIGNATURE, sign_buffer, 5)) {
-      throw std::runtime_error(
-          "Signature validation failed. Could not confirm that the provided "
-          "filename refers to a valid OTBV file.");
-    }
+  if (!file_in) {
+    throw std::runtime_error("Could not open file for reading.");
   }
-  uint32_t x_res, y_res, z_res, data_length;
-  char padding_length;
-  bool volume_padded;
-  {
-    // metadata
-    char meta_buffer[17];
-    static_cast<void>(file_in.read(meta_buffer, 17));
-    padding_length = meta_buffer[0] >> 5;
-    volume_padded = (meta_buffer[0] >> 4) & 1;
-    x_res = pack_chars(meta_buffer + 1);
-    if (!volume_padded) {
-      y_res = z_res = x_res;
-    } else {
-      y_res = pack_chars(meta_buffer + 5);
-      z_res = pack_chars(meta_buffer + 9);
-    }
-    data_length = pack_chars(meta_buffer + 13);
+
+  char sign_buffer[5], meta_buffer[17], padding_length;
+  uint32_t x_res, y_res, z_res;
+
+  // signature
+  static_cast<void>(file_in.read(sign_buffer, 5));
+  if (std::memcmp(SIGNATURE, sign_buffer, 5)) {
+    throw std::runtime_error(
+        "Signature validation failed. Could not confirm that the provided "
+        "filename refers to a valid OTBV file.");
   }
+
+  // metadata
+  static_cast<void>(file_in.read(meta_buffer, 17));
+  padding_length = meta_buffer[0] >> 5;
+  bool is_padded = (meta_buffer[0] >> 4) & 1;
+  x_res = pack_chars(meta_buffer + 1);
+  if (!is_padded) {
+    y_res = z_res = x_res;
+  } else {
+    y_res = pack_chars(meta_buffer + 5);
+    z_res = pack_chars(meta_buffer + 9);
+  }
+
+  if (x_res > MAX_RESOLUTION || y_res > MAX_RESOLUTION ||
+      z_res > MAX_RESOLUTION) {
+    throw std::runtime_error("Provided volume lists resolution above allowed "
+                             "maximum 10e5 per dimension.");
+  }
+
   // data
+  uint32_t data_length = pack_chars(meta_buffer + 13);
   char data_buffer[data_length];
-  // this reads wrong data
   static_cast<void>(file_in.read(data_buffer, data_length));
   std::vector<bool> encoding;
   encoding.reserve(data_length * 8);
